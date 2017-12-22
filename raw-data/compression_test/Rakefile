@@ -50,7 +50,7 @@ class Compressor
 		FileUtils.mkdir_p path
 		yield Pathname.new(path)
 	ensure
-		FileUtils.rm_rf( path ) if File.exists?( path )
+		#FileUtils.rm_rf( path ) if File.exists?( path )
 	end
 
 	def define_tasks
@@ -137,12 +137,40 @@ class Bzip2 < Compressor
 	end
 end
 
+class P7z < Compressor
+
+	def initialize()
+		super("7z", "")
+	end
+
+	def process( src )
+		archive = src.sub_ext(".7z")
+
+		compress {
+			 system("7z a #{archive} #{src}" )
+		}
+
+		compressed_file(archive)
+
+		extract_dir = src.parent.join("extract")
+		FileUtils.mkdir extract_dir
+
+		uncompress {
+				Dir.chdir( extract_dir ) {
+			 		system("7z e  #{archive}")
+				}
+		}
+	end
+end
+
 
 Raw.new()
 (1..9).each { |lvl|
 	Gzip.new( lvl )
 	Bzip2.new( lvl )
 }
+
+P7z.new()
 
 
 
