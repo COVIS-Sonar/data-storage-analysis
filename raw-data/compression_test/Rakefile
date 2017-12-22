@@ -79,11 +79,23 @@ class Compressor
 		end
 
 		task @name.to_s => "#{@name}:#{@level}"
+		task :all => "#{@name}:#{@level}"
 
 	end
 
 end
 
+
+class Raw < Compressor
+
+	def initialize(  )
+		super("raw", "")
+	end
+
+	def process( src )
+		compressed_file(src)
+	end
+end
 
 class Gzip < Compressor
 
@@ -92,24 +104,45 @@ class Gzip < Compressor
 	end
 
 	def process( src )
-
 		compress {
-			puts "gzip -%01d #{src}" % @level
-			puts system("gzip -v -%01d #{src}" % @level)
+			 system("gzip -v -%01d #{src}" % @level)
 		}
 
 		dst = src.sub_ext( src.extname + ".gz" )
 		compressed_file(dst)
 
 		uncompress {
-			puts system("gunzip #{dst}")
+			 system("gunzip #{dst}")
+		}
+	end
+end
+
+class Bzip2 < Compressor
+
+	def initialize( level )
+		super("gzip", level)
+	end
+
+	def process( src )
+		compress {
+			 system("bzip2 -v -%01d #{src}" % @level)
 		}
 
+		dst = src.sub_ext( src.extname + ".bz2" )
+		compressed_file(dst)
+
+		uncompress {
+			 system("bunzip2 #{dst}")
+		}
 	end
 end
 
 
-Gzip.new( 1 )
+Raw.new()
+(1..9).each { |lvl|
+	Gzip.new( lvl )
+	Bzip2.new( lvl )
+}
 
 
 
