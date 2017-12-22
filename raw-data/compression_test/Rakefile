@@ -26,15 +26,15 @@ class Compressor
 		Dir.glob("raw/*")
 	end
 
-	def compress( &blk )
+	def compress( &blk)
 		start = Time.now
 		yield blk
 		@compress_time = Time.now - start
 	end
 
 	def compressed_file( dst )
-puts dst
 		if File.exists?( dst )
+			puts "Found #{dst}, size #{File.size(dst)}"
 			@compresed_size = File.size( dst )
 		end
 	end
@@ -50,7 +50,7 @@ puts dst
 		FileUtils.mkdir_p path
 		yield Pathname.new(path)
 	ensure
-		#FileUtils.rm_rf( path ) if File.exists?( path )
+		FileUtils.rm_rf( path ) if File.exists?( path )
 	end
 
 	def define_tasks
@@ -60,14 +60,15 @@ puts dst
 					task file do
 
 						in_tmpdir{ |path|
-							dst = path.join( Pathname.new(file).basename )
-							FileUtils.cp( file, dst )
+							src = path.join( Pathname.new(file).basename )
+							FileUtils.cp( file, src )
 
-							process(dst)
+							process(src)
 
-							File.open("results.txt",'w+') { |f|
-								outs = [@name, @level, @compress_time, @compressed_size, @uncompress_time]
+							File.open("results.txt",'a') { |f|
+								outs = [@name, @level, @compress_time, @compresed_size, @uncompress_time]
 								f.write( outs.join("\t") + "\n")
+								puts(outs.join("\t"))
 							}
 						}
 					end
@@ -94,17 +95,15 @@ class Gzip < Compressor
 
 		compress {
 			puts "gzip -%01d #{src}" % @level
-			stdout,stderr,status = Open3.capture3("gzip #{src}" % @level)
-			puts status
+			puts system("gzip -v -%01d #{src}" % @level)
 		}
 
 		dst = src.sub_ext( src.extname + ".gz" )
-compressed_file(dst)
+		compressed_file(dst)
 
-uncompress {
-	stdout,stderr,status = Open3.capture3("gunzip #{dst}" % @level)
-	puts status
-}
+		uncompress {
+			puts system("gunzip #{dst}")
+		}
 
 	end
 end
