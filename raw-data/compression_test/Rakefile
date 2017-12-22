@@ -50,7 +50,7 @@ class Compressor
 		FileUtils.mkdir_p path
 		yield Pathname.new(path)
 	ensure
-		#FileUtils.rm_rf( path ) if File.exists?( path )
+		FileUtils.rm_rf( path ) if File.exists?( path )
 	end
 
 	def define_tasks
