@@ -1,0 +1,167 @@
+
+require 'pathname'
+require 'json'
+require 'fileutils'
+require 'open3'
+
+RAWDIR = "raw"
+
+
+class Compressor
+
+	include Rake::DSL
+
+	def initialize(name,level="")
+		@name = name
+		@level = level
+
+		@compress_time = 0
+		@uncompress_time = 0
+		@compressed_size = 0
+
+		define_tasks
+	end
+
+	def raw_files
+		Dir.glob("raw/*")
+	end
+
+	def compress( &blk )
+		start = Time.now
+		yield blk
+		@compress_time = Time.now - start
+	end
+
+	def compressed_file( dst )
+puts dst
+		if File.exists?( dst )
+			@compresed_size = File.size( dst )
+		end
+	end
+
+	def uncompress( &blk )
+		start = Time.now
+		yield blk
+		@uncompress_time = Time.now - start
+	end
+
+	def in_tmpdir
+		path = File.expand_path "./#{Time.now.to_i}#{rand(1000)}/"
+		FileUtils.mkdir_p path
+		yield Pathname.new(path)
+	ensure
+		#FileUtils.rm_rf( path ) if File.exists?( path )
+	end
+
+	def define_tasks
+		namespace @name.to_s do
+			namespace @level.to_s do
+				raw_files.each { |file|
+					task file do
+
+						in_tmpdir{ |path|
+							dst = path.join( Pathname.new(file).basename )
+							FileUtils.cp( file, dst )
+
+							process(dst)
+
+							File.open("results.txt",'w+') { |f|
+								outs = [@name, @level, @compress_time, @compressed_size, @uncompress_time]
+								f.write( outs.join("\t") + "\n")
+							}
+						}
+					end
+				}
+			end
+
+			task @level.to_s => raw_files.map { |f| "#{@level}:#{f}"}
+		end
+
+		task @name.to_s => "#{@name}:#{@level}"
+
+	end
+
+end
+
+
+class Gzip < Compressor
+
+	def initialize( level )
+		super("gzip", level)
+	end
+
+	def process( src )
+
+		compress {
+			puts "gzip -%01d #{src}" % @level
+			stdout,stderr,status = Open3.capture3("gzip #{src}" % @level)
+			puts status
+		}
+
+		dst = src.sub_ext( src.extname + ".gz" )
+compressed_file(dst)
+
+uncompress {
+	stdout,stderr,status = Open3.capture3("gunzip #{dst}" % @level)
+	puts status
+}
+
+	end
+end
+
+
+Gzip.new( 1 )
+
+
+
+
+# task :results do
+# 	sh "sh -c 'du -b bzip?/* gzip?/* raw/* orig/* > compression-results.txt'"
+# end
+#
+#
+# input_files = Dir.glob( "#{RAWDIR}/*.tar" )
+#
+# (1..9).each { |lvl|
+#
+#   taskname = "gzip%01d" % lvl
+#
+#   input_files.each { |infile|
+#     outfile = Pathname.new(taskname).join( File.basename(infile) + ".gz")
+#
+#     file outfile do
+#       #mkdir_p taskname unless File.directory?(taskname)
+#
+#       sh "sh -c 'gzip -#{lvl} -c #{infile} > #{outfile}'"
+#     end
+#
+#     multitask taskname => outfile
+#
+#   }
+#
+#   task :gzip => taskname
+#
+# }
+#
+#
+# (1..9).each { |lvl|
+#
+#   taskname = "bzip%01d" % lvl
+#
+#   input_files.each { |infile|
+#     outfile = Pathname.new(taskname).join( File.basename(infile) + ".bz2")
+#
+#     file outfile do
+#       #mkdir taskname unless File.directory?(taskname)
+#
+#       print outfile
+#       sh "sh -c 'bzip2 -#{lvl} -c #{infile}' > #{outfile}''"
+#     end
+#
+#     multitask taskname => outfile
+#
+#   }
+#
+#   task :bzip => taskname
+#
+# }
