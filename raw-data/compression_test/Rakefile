@@ -59,14 +59,16 @@ class Compressor
 				raw_files.each { |file|
 					task file do
 
+						file = Pathname.new(file)
 						in_tmpdir{ |path|
-							src = path.join( Pathname.new(file).basename )
+
+							src = path.join( file.basename )
 							FileUtils.cp( file, src )
 
 							process(src)
 
 							File.open("results.txt",'a') { |f|
-								outs = [@name, @level, @compress_time, @compresed_size, @uncompress_time]
+								outs = [@name, @level, file.basename, @compress_time, @compresed_size, @uncompress_time]
 								f.write( outs.join("\t") + "\n")
 								puts(outs.join("\t"))
 							}
@@ -100,41 +102,62 @@ end
 class Gzip < Compressor
 
 	def initialize( level )
-		super("gzip", level)
+		super(compressor, level)
 	end
 
 	def process( src )
 		compress {
-			 system("gzip -v -%01d #{src}" % @level)
+			 system("#{compressor} -%01d #{src}" % @level)
 		}
 
-		dst = src.sub_ext( src.extname + ".gz" )
+		dst = src.sub_ext( src.extname + suffix )
 		compressed_file(dst)
 
 		uncompress {
-			 system("gunzip #{dst}")
+			 system("#{compressor} -d #{dst}")
 		}
 	end
+
+	def compressor; "gzip"; end
+	def suffix; ".gz"; end
 end
 
-class Bzip2 < Compressor
+class Bzip2 < Gzip
 
 	def initialize( level )
-		super("gzip", level)
+		super(level)
 	end
 
-	def process( src )
-		compress {
-			 system("bzip2 -v -%01d #{src}" % @level)
-		}
+	def compressor; "bzip2"; end
+	def suffix; ".bz2"; end
+end
 
-		dst = src.sub_ext( src.extname + ".bz2" )
-		compressed_file(dst)
+class Pigz < Gzip
 
-		uncompress {
-			 system("bunzip2 #{dst}")
-		}
+	def initialize( level )
+		super(level)
 	end
+
+	def compressor; "pigz"; end
+	def suffix; ".gz"; end
+end
+
+class Lbzip2 < Bzip2
+
+	def initialize( level )
+		super(level)
+	end
+
+	def compressor; "lbzip2"; end
+end
+
+class Pbzip2 < Bzip2
+
+	def initialize( level )
+		super(level)
+	end
+
+	def compressor; "pbzip2"; end
 end
 
 class P7z < Compressor
@@ -163,11 +186,41 @@ class P7z < Compressor
 	end
 end
 
+class Lrzip < Compressor
+
+	def initialize(compressor)
+		super("lrzip", compressor)
+	end
+
+	def process( src )
+		compress {
+			 system("#{compressor} --%s #{src}" % @level)
+		}
+
+		dst = src.sub_ext( src.extname + suffix )
+		compressed_file(dst)
+
+		uncompress {
+			 system("#{compressor} -df #{dst}")
+		}
+	end
+
+	def compressor; "lrzip"; end
+	def suffix; ".lrz"; end
+end
+
 
 Raw.new()
 (1..9).each { |lvl|
 	Gzip.new( lvl )
+	Pigz.new(lvl)
 	Bzip2.new( lvl )
+	Lbzip2.new(lvl)
+	Pbzip2.new(lvl)
+}
+
+["bzip2", "gzip", "zpaq"].each { |lvl|
+	Lrzip.new( lvl )
 }
 
 P7z.new()
